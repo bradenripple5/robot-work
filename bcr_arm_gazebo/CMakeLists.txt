@@ -24,13 +24,14 @@ find_package(trajectory_msgs REQUIRED)
 find_package(xacro REQUIRED)
 
 install(
-  DIRECTORY launch models worlds
+  DIRECTORY launch models worlds web
   DESTINATION share/${PROJECT_NAME}
 )
 
 install(
   PROGRAMS
   scripts/control_arm_cli.py
+  scripts/browser_bridge.py
   scripts/test_arm_movement.py
   DESTINATION lib/${PROJECT_NAME}
 )

@@ -32,26 +32,26 @@ class ArmControllerCLI(Node):
         ]
 
         self.predefined_poses = {
-            "home": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "home": [0.0, -math.pi / 2, 0.0, math.pi, 0.0, math.pi, 0.0],
             "ready": [0.0, -0.785, 0.0, -1.57, 0.0, 0.785, 0.0],  # Example "ready" pose
             "stretch_up": [
                 0.0,
                 0.0,
                 0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],  # Vertical chain with no extra elbow bend
+            "forward_low": [
+                0.0,
                 -math.pi / 2,
                 0.0,
                 0.0,
                 0.0,
-            ],  # Pointing upwards
-            "forward_low": [
                 0.0,
-                0.5,
-                0.7,
-                -1.0,
                 0.0,
-                0.5,
-                0.0,
-            ],  # Example forward and slightly down
+            ],  # Chain pitched outward, roughly parallel to the ground
         }
         self.get_logger().info("Arm Controller CLI started. Waiting for action server...")
         action_server_name = "/joint_trajectory_controller/follow_joint_trajectory"

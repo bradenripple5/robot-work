@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BCR Arm Browser Control</title>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Vite + ROS 2 Bridge</p>
+        <h1>BCR Arm Control</h1>
+        <p class="lede">
+          Browser controls on top of the existing ROS 2 joint trajectory controller.
+          Gazebo keeps the physics; this page handles commands and status.
+        </p>
+      </section>
+
+      <section class="panel viewer-panel">
+        <div class="panel-head">
+          <div>
+            <h2>3D Viewer</h2>
+            <p class="subtle">Orbit: drag. Pan: Shift+drag. Zoom: mouse wheel.</p>
+          </div>
+          <button id="reset-camera" type="button">Reset Camera</button>
+        </div>
+        <canvas id="viewer" width="900" height="500"></canvas>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Presets</h2>
+          <label>
+            Duration (s)
+            <input id="preset-duration" type="number" min="0.5" step="0.5" value="1" />
+          </label>
+        </div>
+        <div id="pose-buttons" class="pose-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Custom Joints</h2>
+          <label>
+            Duration (s)
+            <input id="custom-duration" type="number" min="0.5" step="0.5" value="1" />
+          </label>
+        </div>
+        <form id="joint-form" class="joint-grid"></form>
+        <div class="actions">
+          <button id="send-custom" class="primary" type="button">Send Current Joint Values</button>
+          <button id="copy-current" type="button">Load Current State</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Direct Command</h2>
+          <label>
+            Duration (s)
+            <input id="direct-duration" type="number" min="0.5" step="0.5" value="1" />
+          </label>
+        </div>
+        <label>
+          Joint command list (degrees, 7 comma-separated values, multiple commands separated by semicolons)
+          <input
+            id="direct-command"
+            type="text"
+            value="0, -90, 0, 180, 0, 180, 0"
+          />
+        </label>
+        <div class="actions">
+          <button id="send-direct" type="button">Send Direct Command</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Motion Sequences</h2>
+          <span class="subtle">Common multi-step moves</span>
+        </div>
+        <div id="sequence-buttons" class="pose-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Scene Items</h2>
+          <span class="subtle">Place or remove key objects</span>
+        </div>
+        <div class="item-controls">
+          <label>
+            Item
+            <select id="scene-item">
+              <option value="arm">Arm</option>
+              <option value="table">Table</option>
+              <option value="box">Box</option>
+            </select>
+          </label>
+          <div class="actions">
+            <button id="place-item" type="button">Place</button>
+            <button id="remove-item" type="button">Remove</button>
+          </div>
+        </div>
+        <div id="item-status" class="item-status"></div>
+      </section>
+
+      <section class="panel status-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Status</h2>
+            <div class="sync-row">
+              <button id="sync-robot" type="button">Sync With Robot</button>
+              <span id="sync-status" class="sync-status sync-warn">Bridge not checked yet</span>
+            </div>
+          </div>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+        <pre id="status-output">Loading...</pre>
+      </section>
+
+      <section class="panel command-panel">
+        <div class="panel-head">
+          <h2>Command Log</h2>
+          <button id="clear-commands" type="button">Clear Commands</button>
+        </div>
+        <div id="command-log" class="command-log">No commands sent yet.</div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

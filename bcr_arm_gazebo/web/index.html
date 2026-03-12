@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BCR Arm Browser Control</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">ROS 2 Browser Bridge</p>
+        <h1>BCR Arm Control</h1>
+        <p class="lede">
+          Browser controls on top of the existing ROS 2 joint trajectory controller.
+          Gazebo keeps the physics; this page handles commands and status.
+        </p>
+      </section>
+
+      <section class="panel viewer-panel">
+        <div class="panel-head">
+          <div>
+            <h2>3D Viewer</h2>
+            <p class="subtle">Orbit: drag. Pan: Shift+drag. Zoom: mouse wheel.</p>
+          </div>
+          <button id="reset-camera" type="button">Reset Camera</button>
+        </div>
+        <canvas id="viewer" width="900" height="500"></canvas>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Presets</h2>
+          <label>
+            Duration (s)
+            <input id="preset-duration" type="number" min="0.5" step="0.5" value="5">
+          </label>
+        </div>
+        <div id="pose-buttons" class="pose-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Custom Joints</h2>
+          <label>
+            Duration (s)
+            <input id="custom-duration" type="number" min="0.5" step="0.5" value="5">
+          </label>
+        </div>
+        <form id="joint-form" class="joint-grid"></form>
+        <div class="actions">
+          <button id="send-custom" class="primary" type="button">Send Custom Target</button>
+          <button id="copy-current" type="button">Load Current State</button>
+        </div>
+      </section>
+
+      <section class="panel status-panel">
+        <div class="panel-head">
+          <h2>Status</h2>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+        <pre id="status-output">Loading...</pre>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>
