@@ -80,6 +80,17 @@ h1 {
   margin-bottom: 16px;
 }
 
+.viewer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+
+.viewer-toolbar label {
+  min-width: 180px;
+}
+
 .viewer-panel {
   overflow: hidden;
 }
@@ -282,12 +293,158 @@ button.primary {
 }
 
 @media (max-width: 720px) {
+  .shell {
+    width: min(100vw - 16px, 100%);
+    padding: 14px 0 24px;
+  }
+
+  .hero {
+    margin-bottom: 12px;
+  }
+
+  .eyebrow {
+    margin-bottom: 4px;
+    font-size: 0.72rem;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    line-height: 1;
+  }
+
+  .lede {
+    margin-top: 8px;
+    font-size: 0.92rem;
+  }
+
+  .panel {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+
   .panel-head {
     align-items: stretch;
     flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .viewer-toolbar {
+    gap: 8px;
+  }
+
+  .viewer-toolbar label,
+  .viewer-toolbar button {
+    width: 100%;
+  }
+
+  .panel-head h2 {
+    font-size: 1.08rem;
+  }
+
+  .subtle,
+  label,
+  .item-row span,
+  .command-entry span {
+    font-size: 0.85rem;
+  }
+
+  input,
+  button,
+  select {
+    padding: 9px 10px;
+    border-radius: 10px;
+    font-size: 0.95rem;
   }
 
   #viewer {
-    height: 360px;
+    height: 250px;
+    min-height: 250px;
+    border-radius: 12px;
+  }
+
+  .pose-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .joint-grid,
+  .item-controls,
+  .command-log {
+    gap: 8px;
+  }
+
+  .joint-field {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .joint-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .joint-row span {
+    font-size: 0.9rem;
+  }
+
+  .actions {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .actions button,
+  .sync-row button {
+    flex: 1 1 100%;
+  }
+
+  .item-row,
+  .sync-row {
+    gap: 8px;
+  }
+
+  .item-row {
+    padding: 9px 10px;
+  }
+
+  .status-panel pre {
+    padding: 10px;
+    font-size: 0.82rem;
+    border-radius: 12px;
+  }
+
+  .sync-status {
+    min-height: 34px;
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.82rem;
+  }
+
+  .command-entry {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .shell {
+    width: min(100vw - 12px, 100%);
+    padding-top: 10px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  #viewer {
+    height: 220px;
+    min-height: 220px;
+  }
+
+  .pose-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -22,7 +22,17 @@
             <h2>3D Viewer</h2>
             <p class="subtle">Orbit: drag. Pan: Shift+drag. Zoom: mouse wheel.</p>
           </div>
-          <button id="reset-camera" type="button">Reset Camera</button>
+          <div class="viewer-toolbar">
+            <label>
+              Scene
+              <select id="scene-select">
+                <option value="gantry" selected>Gantry Cell</option>
+                <option value="arm">Arm Workcell</option>
+              </select>
+            </label>
+            <button id="reset-camera" type="button">Reset Camera</button>
+            <button id="cycle-gantry-focus" type="button">Cycle Gantry Focus</button>
+          </div>
         </div>
         <canvas id="viewer" width="900" height="500"></canvas>
       </section>
