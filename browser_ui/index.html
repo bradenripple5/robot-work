@@ -20,7 +20,7 @@
         <div class="panel-head">
           <div>
             <h2>3D Viewer</h2>
-            <p class="subtle">Orbit: drag. Pan: Shift+drag. Zoom: mouse wheel.</p>
+            <p class="subtle">Orbit: drag. Pan: Shift+drag, Ctrl+drag, or right-drag. Zoom: mouse wheel.</p>
           </div>
           <div class="viewer-toolbar">
             <label>
@@ -31,6 +31,7 @@
               </select>
             </label>
             <button id="reset-camera" type="button">Reset Camera</button>
+            <button id="auto-zoom-out" type="button">Auto Zoom Out</button>
             <button id="cycle-gantry-focus" type="button">Cycle Gantry Focus</button>
           </div>
         </div>
@@ -101,9 +102,6 @@
           <label>
             Item
             <select id="scene-item">
-              <option value="arm">Arm</option>
-              <option value="table">Table</option>
-              <option value="box">Box</option>
             </select>
           </label>
           <div class="actions">
@@ -112,6 +110,29 @@
           </div>
         </div>
         <div id="item-status" class="item-status"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Imported Models</h2>
+          <span class="subtle">Import GLB/GLTF/OBJ into the active scene and remove later</span>
+        </div>
+        <input id="import-model-file" type="file" accept=".glb,.gltf,.obj,.stl" hidden />
+        <div class="item-controls">
+          <div class="actions">
+            <button id="import-model-button" type="button">Import 3D Model</button>
+          </div>
+          <label>
+            Imported models
+            <select id="imported-model-select">
+              <option value="">No models imported</option>
+            </select>
+          </label>
+          <div class="actions">
+            <button id="remove-imported-model-button" type="button">Remove Selected Model</button>
+          </div>
+        </div>
+        <div id="imported-model-status" class="subtle"></div>
       </section>
 
       <section class="panel status-panel">

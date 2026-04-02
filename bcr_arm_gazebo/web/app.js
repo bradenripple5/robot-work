@@ -8,7 +8,6 @@ const copyCurrentButton = document.getElementById("copy-current");
 const refreshButton = document.getElementById("refresh");
 const resetCameraButton = document.getElementById("reset-camera");
 const viewerCanvas = document.getElementById("viewer");
-const viewerContext = viewerCanvas.getContext("2d");
 
 let lastStatus = null;
 
@@ -38,6 +37,11 @@ const pointerState = {
   x: 0,
   y: 0,
 };
+
+let engine;
+let scene;
+let viewerCamera;
+const segmentState = [];
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -133,40 +137,8 @@ function getCameraPosition() {
   };
 }
 
-function projectPoint(point) {
-  const eye = getCameraPosition();
-  const forward = normalize(subtract(camera.target, eye));
-  const right = normalize(cross(forward, { x: 0, y: 0, z: 1 }));
-  const up = cross(right, forward);
-  const relative = subtract(point, eye);
-  const xCam = dot(relative, right);
-  const yCam = dot(relative, up);
-  const zCam = dot(relative, forward);
-  if (zCam <= 0.01) {
-    return null;
-  }
-
-  const focal = Math.min(viewerCanvas.width, viewerCanvas.height) * 0.95;
-  return {
-    x: viewerCanvas.width * 0.5 + (xCam / zCam) * focal,
-    y: viewerCanvas.height * 0.52 - (yCam / zCam) * focal,
-    depth: zCam,
-  };
-}
-
-function drawLine3d(start, end, color, width = 1) {
-  const a = projectPoint(start);
-  const b = projectPoint(end);
-  if (!a || !b) {
-    return null;
-  }
-  viewerContext.strokeStyle = color;
-  viewerContext.lineWidth = width;
-  viewerContext.beginPath();
-  viewerContext.moveTo(a.x, a.y);
-  viewerContext.lineTo(b.x, b.y);
-  viewerContext.stroke();
-  return { a, b };
+function toBabylonVector(point) {
+  return new BABYLON.Vector3(point.x, point.z, point.y);
 }
 
 function buildArmSegments(positions) {
@@ -190,87 +162,133 @@ function buildArmSegments(positions) {
   });
 }
 
-function renderViewer() {
-  const dpr = window.devicePixelRatio || 1;
-  const bounds = viewerCanvas.getBoundingClientRect();
-  const width = Math.max(1, Math.floor(bounds.width * dpr));
-  const height = Math.max(1, Math.floor(bounds.height * dpr));
-  if (viewerCanvas.width !== width || viewerCanvas.height !== height) {
-    viewerCanvas.width = width;
-    viewerCanvas.height = height;
+function orientCylinderBetweenPoints(mesh, start, end) {
+  const delta = end.subtract(start);
+  const length = delta.length();
+  if (length < 1e-5) {
+    return;
   }
 
-  viewerContext.clearRect(0, 0, viewerCanvas.width, viewerCanvas.height);
+  const dir = delta.scale(1 / length);
+  mesh.position = start.add(end).scale(0.5);
+  mesh.scaling.y = length;
 
+  const up = BABYLON.Axis.Y;
+  const axis = BABYLON.Vector3.Cross(up, dir);
+  const dotVal = clamp(BABYLON.Vector3.Dot(up, dir), -1, 1);
+
+  if (axis.lengthSquared() < 1e-8) {
+    if (dotVal < 0) {
+      mesh.rotationQuaternion = BABYLON.Quaternion.RotationAxis(BABYLON.Axis.X, Math.PI);
+    } else {
+      mesh.rotationQuaternion = BABYLON.Quaternion.Identity();
+    }
+    return;
+  }
+
+  const angle = Math.acos(dotVal);
+  mesh.rotationQuaternion = BABYLON.Quaternion.RotationAxis(axis.normalize(), angle);
+}
+
+function createGrid() {
+  const linePoints = [];
   for (let i = -6; i <= 6; i += 1) {
-    drawLine3d(
-      { x: -0.9, y: i * 0.15, z: 0 },
-      { x: 0.9, y: i * 0.15, z: 0 },
-      "rgba(124, 209, 255, 0.12)"
-    );
-    drawLine3d(
-      { x: i * 0.15, y: -0.9, z: 0 },
-      { x: i * 0.15, y: 0.9, z: 0 },
-      "rgba(124, 209, 255, 0.12)"
-    );
+    linePoints.push([toBabylonVector({ x: -0.9, y: i * 0.15, z: 0 }), toBabylonVector({ x: 0.9, y: i * 0.15, z: 0 })]);
+    linePoints.push([toBabylonVector({ x: i * 0.15, y: -0.9, z: 0 }), toBabylonVector({ x: i * 0.15, y: 0.9, z: 0 })]);
   }
+  const grid = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: linePoints, updatable: false }, scene);
+  grid.color = new BABYLON.Color3(0.2, 0.35, 0.45);
+}
 
-  drawLine3d({ x: 0, y: 0, z: 0 }, { x: 0.22, y: 0, z: 0 }, "#ff6b6b", 2);
-  drawLine3d({ x: 0, y: 0, z: 0 }, { x: 0, y: 0.22, z: 0 }, "#7dffb3", 2);
-  drawLine3d({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0.22 }, "#7cd1ff", 2);
+function createAxes() {
+  const xAxis = BABYLON.MeshBuilder.CreateLines("axisX", {
+    points: [toBabylonVector({ x: 0, y: 0, z: 0 }), toBabylonVector({ x: 0.22, y: 0, z: 0 })],
+  }, scene);
+  xAxis.color = new BABYLON.Color3(1.0, 0.42, 0.42);
 
-  const baseBottom = projectPoint({ x: 0, y: 0, z: 0 });
-  const baseTop = projectPoint({ x: 0, y: 0, z: ARM_CONFIG.baseHeight });
-  if (baseBottom && baseTop) {
-    viewerContext.strokeStyle = "#253746";
-    viewerContext.lineCap = "round";
-    viewerContext.lineWidth = 42 * ((baseBottom.depth + baseTop.depth) * 0.5) ** -0.7;
-    viewerContext.beginPath();
-    viewerContext.moveTo(baseBottom.x, baseBottom.y);
-    viewerContext.lineTo(baseTop.x, baseTop.y);
-    viewerContext.stroke();
-  }
+  const yAxis = BABYLON.MeshBuilder.CreateLines("axisY", {
+    points: [toBabylonVector({ x: 0, y: 0, z: 0 }), toBabylonVector({ x: 0, y: 0.22, z: 0 })],
+  }, scene);
+  yAxis.color = new BABYLON.Color3(0.49, 1.0, 0.7);
 
-  const positions = lastStatus?.joint_state?.positions || [0, 0, 0, 0, 0, 0, 0];
-  const segments = buildArmSegments(positions)
-    .map((segment) => {
-      const start2d = projectPoint(segment.start);
-      const end2d = projectPoint(segment.end);
-      if (!start2d || !end2d) {
-        return null;
-      }
-      return {
-        ...segment,
-        start2d,
-        end2d,
-        sortDepth: (start2d.depth + end2d.depth) * 0.5,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.sortDepth - a.sortDepth);
+  const zAxis = BABYLON.MeshBuilder.CreateLines("axisZ", {
+    points: [toBabylonVector({ x: 0, y: 0, z: 0 }), toBabylonVector({ x: 0, y: 0, z: 0.22 })],
+  }, scene);
+  zAxis.color = new BABYLON.Color3(0.49, 0.82, 1.0);
+}
 
-  segments.forEach((segment, index) => {
-    viewerContext.strokeStyle = index % 2 === 0 ? "#d6ff57" : "#7cd1ff";
-    viewerContext.lineCap = "round";
-    viewerContext.lineWidth = segment.radius * segment.sortDepth ** -0.72;
-    viewerContext.beginPath();
-    viewerContext.moveTo(segment.start2d.x, segment.start2d.y);
-    viewerContext.lineTo(segment.end2d.x, segment.end2d.y);
-    viewerContext.stroke();
+function initScene() {
+  engine = new BABYLON.Engine(viewerCanvas, true, { preserveDrawingBuffer: true, stencil: true });
+  scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0.06, 0.09, 0.12, 1.0);
 
-    viewerContext.fillStyle = "#f5fbff";
-    viewerContext.beginPath();
-    viewerContext.arc(
-      segment.start2d.x,
-      segment.start2d.y,
-      Math.max(2, 7 * segment.start2d.depth ** -0.7),
-      0,
-      Math.PI * 2
-    );
-    viewerContext.fill();
+  viewerCamera = new BABYLON.FreeCamera("viewerCamera", new BABYLON.Vector3(0, 0, 0), scene);
+  viewerCamera.minZ = 0.01;
+  viewerCamera.maxZ = 25;
+
+  const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0.2, 1, 0.3), scene);
+  hemi.intensity = 0.9;
+  const key = new BABYLON.DirectionalLight("key", new BABYLON.Vector3(-0.6, -1, -0.5), scene);
+  key.intensity = 0.7;
+
+  createGrid();
+  createAxes();
+
+  const baseMat = new BABYLON.StandardMaterial("baseMat", scene);
+  baseMat.diffuseColor = new BABYLON.Color3(0.15, 0.22, 0.27);
+  const base = BABYLON.MeshBuilder.CreateCylinder("base", { diameter: 0.16, height: ARM_CONFIG.baseHeight }, scene);
+  base.material = baseMat;
+  base.position = toBabylonVector({ x: 0, y: 0, z: ARM_CONFIG.baseHeight * 0.5 });
+
+  ARM_CONFIG.chain.forEach((joint, index) => {
+    const segmentMat = new BABYLON.StandardMaterial(`segmentMat${index}`, scene);
+    const evenColor = new BABYLON.Color3(0.84, 1.0, 0.34);
+    const oddColor = new BABYLON.Color3(0.49, 0.82, 1.0);
+    segmentMat.diffuseColor = index % 2 === 0 ? evenColor : oddColor;
+
+    const segmentMesh = BABYLON.MeshBuilder.CreateCylinder(`segment${index}`, {
+      diameter: Math.max(0.012, joint.radius * 0.0022),
+      height: 1,
+      tessellation: 20,
+    }, scene);
+    segmentMesh.material = segmentMat;
+
+    const jointMesh = BABYLON.MeshBuilder.CreateSphere(`joint${index}`, {
+      diameter: Math.max(0.015, joint.radius * 0.0028),
+      segments: 12,
+    }, scene);
+    const jointMat = new BABYLON.StandardMaterial(`jointMat${index}`, scene);
+    jointMat.diffuseColor = new BABYLON.Color3(0.96, 0.98, 1.0);
+    jointMesh.material = jointMat;
+
+    segmentState.push({ segmentMesh, jointMesh });
   });
 
-  requestAnimationFrame(renderViewer);
+  window.addEventListener("resize", () => engine.resize());
+
+  engine.runRenderLoop(() => {
+    updateViewer();
+    scene.render();
+  });
+}
+
+function updateViewer() {
+  const eye = toBabylonVector(getCameraPosition());
+  const target = toBabylonVector(camera.target);
+  viewerCamera.position.copyFrom(eye);
+  viewerCamera.setTarget(target);
+
+  const positions = lastStatus?.joint_state?.positions || [0, 0, 0, 0, 0, 0, 0];
+  const segments = buildArmSegments(positions);
+
+  segments.forEach((segment, index) => {
+    const state = segmentState[index];
+    if (!state) return;
+    const start = toBabylonVector(segment.start);
+    const end = toBabylonVector(segment.end);
+    state.jointMesh.position.copyFrom(start);
+    orientCylinderBetweenPoints(state.segmentMesh, start, end);
+  });
 }
 
 function formatPositions(positions) {
@@ -367,6 +385,7 @@ copyCurrentButton.addEventListener("click", () => {
 });
 
 refreshButton.addEventListener("click", fetchStatus);
+
 resetCameraButton.addEventListener("click", () => {
   camera.yaw = 0.9;
   camera.pitch = 0.55;
@@ -412,6 +431,6 @@ viewerCanvas.addEventListener("wheel", (event) => {
   camera.distance = clamp(camera.distance * (1 + event.deltaY * 0.001), 0.7, 5.5);
 });
 
+initScene();
 fetchStatus();
 setInterval(fetchStatus, 1500);
-renderViewer();

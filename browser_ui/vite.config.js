@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     server: {
-      host: env.BCR_UI_HOST || "127.0.0.1",
+      host: env.BCR_UI_HOST || "0.0.0.0",
       port: Number(env.BCR_UI_PORT || 5173),
       proxy: {
         "/api": {
@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     preview: {
-      host: env.BCR_UI_HOST || "127.0.0.1",
+      host: env.BCR_UI_HOST || "0.0.0.0",
       port: Number(env.BCR_UI_PREVIEW_PORT || 4173),
     },
   };

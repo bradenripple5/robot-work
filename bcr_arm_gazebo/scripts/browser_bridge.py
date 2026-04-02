@@ -2,13 +2,11 @@
 
 import argparse
 import json
-import os
 import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from ament_index_python.packages import get_package_share_directory
 from builtin_interfaces.msg import Duration
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -34,16 +32,21 @@ PREDEFINED_POSES = {
     "forward_low": [0.0, -1.57, 0.0, 0.0, 0.0, 0.0, 0.0],
 }
 
+ROS_STATE_FRESHNESS_SEC = 1.5
+
 
 class BrowserBridge(Node):
     def __init__(self):
         super().__init__("browser_bridge")
         self._lock = threading.Lock()
-        self._latest_joint_state = {
+        self._ros_joint_state = {
             "names": JOINT_NAMES,
             "positions": [0.0] * len(JOINT_NAMES),
-            "stamp": time.time(),
+            "stamp": 0.0,
+            "source": "ros",
         }
+        self._virtual_positions = [0.0] * len(JOINT_NAMES)
+        self._virtual_motion = None
         self._last_command = {
             "type": "none",
             "label": None,
@@ -70,17 +73,56 @@ class BrowserBridge(Node):
                 positions.append(0.0)
 
         with self._lock:
-            self._latest_joint_state = {
+            self._ros_joint_state = {
                 "names": JOINT_NAMES,
                 "positions": positions,
                 "stamp": time.time(),
+                "source": "ros",
             }
+
+    def _ros_state_is_fresh_locked(self, now):
+        return (now - float(self._ros_joint_state["stamp"])) < ROS_STATE_FRESHNESS_SEC
+
+    def _current_virtual_positions_locked(self, now):
+        if not self._virtual_motion:
+            return list(self._virtual_positions)
+
+        progress = min(
+            1.0,
+            max(
+                0.0,
+                (now - self._virtual_motion["started_at"]) / self._virtual_motion["duration"],
+            ),
+        )
+        start = self._virtual_motion["start"]
+        target = self._virtual_motion["target"]
+        positions = [start[i] + (target[i] - start[i]) * progress for i in range(len(target))]
+
+        if progress >= 1.0:
+            self._virtual_positions = list(target)
+            self._virtual_motion = None
+            return list(self._virtual_positions)
+
+        return positions
+
+    def _effective_joint_state_locked(self):
+        now = time.time()
+        if self._ros_state_is_fresh_locked(now):
+            return dict(self._ros_joint_state)
+
+        positions = self._current_virtual_positions_locked(now)
+        return {
+            "names": JOINT_NAMES,
+            "positions": positions,
+            "stamp": now,
+            "source": "virtual",
+        }
 
     def status(self):
         with self._lock:
             return {
                 "ok": True,
-                "joint_state": self._latest_joint_state,
+                "joint_state": self._effective_joint_state_locked(),
                 "last_command": self._last_command,
                 "command_history": list(self._command_history),
                 "predefined_poses": PREDEFINED_POSES,
@@ -102,12 +144,20 @@ class BrowserBridge(Node):
         self.publisher.publish(msg)
 
         with self._lock:
+            now = time.time()
+            start_positions = self._effective_joint_state_locked()["positions"]
+            self._virtual_motion = {
+                "start": [float(p) for p in start_positions],
+                "target": [float(p) for p in positions],
+                "started_at": now,
+                "duration": max(0.2, float(duration_sec)),
+            }
             self._last_command = {
                 "type": "trajectory",
                 "label": str(label),
                 "target": [float(p) for p in positions],
                 "duration": float(duration_sec),
-                "stamp": time.time(),
+                "stamp": now,
                 "source": str(source),
             }
             self._command_history.append(self._last_command.copy())
@@ -184,7 +234,7 @@ class BrowserRequestHandler(BaseHTTPRequestHandler):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the BCR Arm browser bridge.")
-    parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind")
+    parser.add_argument("--host", default="0.0.0.0", help="Host interface to bind")
     parser.add_argument("--port", type=int, default=8080, help="HTTP port to bind")
     return parser.parse_args()
 
