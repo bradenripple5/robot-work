@@ -63,6 +63,45 @@ Or run the pieces separately:
 ./scripts/run_browser_vite.sh --host 127.0.0.1 --port 5176 --api-url http://127.0.0.1:8080
 ```
 
+### No-Backend Demo Mode (GitHub Pages-Friendly)
+
+You can run the browser UI without a ROS bridge backend and still show the command/sensor flow.
+
+Set:
+
+```bash
+cd browser_ui
+VITE_DEMO_NO_BACKEND=true npm run dev
+```
+
+Or for a production/static build:
+
+```bash
+cd browser_ui
+VITE_DEMO_NO_BACKEND=true npm run build
+```
+
+In this mode, the Status panel explicitly reports that backend calls are suppressed and sensor data is simulated.
+
+### Publish `browser_ui` On GitHub Pages
+
+This repository includes a GitHub Actions workflow at `.github/workflows/pages.yml` that:
+
+- Builds `browser_ui/` with `VITE_DEMO_NO_BACKEND=true`
+- Sets the correct Vite base path for user/org pages vs project pages
+- Deploys `browser_ui/dist` to GitHub Pages
+
+To enable:
+
+1. Push changes to `main` (or run the workflow manually from the Actions tab).
+2. In GitHub: `Settings -> Pages -> Build and deployment -> Source = GitHub Actions`.
+3. Wait for the `Deploy Browser UI To Pages` workflow to finish.
+
+URL:
+
+- User/org site repo (`<user>.github.io`): `https://<user>.github.io/`
+- Project repo (`bcr_arm`): `https://<user>.github.io/bcr_arm/`
+
 ### What The UI Includes
 
 - 3D browser viewer for the arm and gantry cell

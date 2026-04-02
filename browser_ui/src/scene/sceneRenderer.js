@@ -56,6 +56,10 @@ let collisionState = {
 };
 const JOINT_STATE_FRESHNESS_SEC = 2.5;
 const STATUS_POLL_INTERVAL_MS = 250;
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+const DEMO_NO_BACKEND = String(import.meta.env.VITE_DEMO_NO_BACKEND || "").toLowerCase() === "true";
 
 const ARM_CONFIG = {
   chain: [
@@ -117,6 +121,16 @@ let fallbackContext = null;
 let viewerNotice = null;
 let webglMode = "unknown";
 let gantryFocusIndex = -1;
+let backendMode = DEMO_NO_BACKEND ? "demo" : "live";
+let lastBackendCall = null;
+let demoLastCommand = {
+  type: "demo-idle",
+  label: "none",
+  target: [0, 0, 0, 0, 0, 0, 0],
+  duration: null,
+  stamp: Date.now() / 1000,
+  source: "demo",
+};
 const fallbackCamera = {
   yaw: 0.9,
   pitch: 0.55,
@@ -362,6 +376,100 @@ function shortestAngleDelta(from, to) {
 
 function formatPositions(positions) {
   return positions.map((value) => Number(value).toFixed(3)).join(", ");
+}
+
+function resolveApiPath(path) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (!API_BASE_URL) {
+    return normalizedPath;
+  }
+  return `${API_BASE_URL}${normalizedPath}`;
+}
+
+function parseJsonBody(body) {
+  if (!body || typeof body !== "string") {
+    return {};
+  }
+  try {
+    return JSON.parse(body);
+  } catch (_error) {
+    return {};
+  }
+}
+
+function mapCommandEntryToBackend(entry) {
+  return {
+    type: "trajectory",
+    label: entry.label || "command",
+    target: Array.isArray(entry.target) ? entry.target : [],
+    duration: Number(entry.duration ?? 0),
+    stamp: Number(entry.stamp || Date.now()) / 1000,
+    source: entry.source || "local-ui",
+  };
+}
+
+function buildDemoStatus() {
+  const nowSec = Date.now() / 1000;
+  const pulse = Math.sin(nowSec * 0.95) * 0.006;
+  const positions = localJointPositions.map((value, index) =>
+    normalizeAngle(value + pulse * Math.cos(nowSec * 0.55 + index * 0.9))
+  );
+  return {
+    ok: true,
+    joint_state: {
+      names: JOINT_NAMES,
+      positions,
+      stamp: nowSec,
+      source: "demo-sensor",
+    },
+    last_command: demoLastCommand,
+    command_history: commandHistory.map(mapCommandEntryToBackend),
+    predefined_poses: currentPredefinedPoses,
+  };
+}
+
+async function apiRequest(path, init = {}) {
+  const method = String(init.method || "GET").toUpperCase();
+  const resolvedPath = resolveApiPath(path);
+  lastBackendCall = {
+    at: Date.now(),
+    method,
+    path: resolvedPath,
+    suppressed: DEMO_NO_BACKEND,
+  };
+
+  if (DEMO_NO_BACKEND) {
+    const payload = parseJsonBody(init.body);
+    if (path === "/api/pose") {
+      const pose = payload.pose;
+      const target = currentPredefinedPoses[pose] || targetJointPositions;
+      demoLastCommand = {
+        type: "pose",
+        label: String(pose || "pose"),
+        target: [...target],
+        duration: Number(payload.duration ?? 1),
+        stamp: Date.now() / 1000,
+        source: "demo-no-backend",
+      };
+    } else if (path === "/api/joints") {
+      const target = Array.isArray(payload.positions) ? payload.positions : targetJointPositions;
+      demoLastCommand = {
+        type: "trajectory",
+        label: String(payload.label || "custom"),
+        target: [...target],
+        duration: Number(payload.duration ?? 1),
+        stamp: Date.now() / 1000,
+        source: "demo-no-backend",
+      };
+    }
+    return buildDemoStatus();
+  }
+
+  const response = await fetch(resolvedPath, init);
+  if (!response.ok) {
+    throw new Error(`status ${response.status}`);
+  }
+  return response.json();
 }
 
 function renderCommandHistory() {
@@ -675,7 +783,7 @@ function renderPoseButtons(poses) {
 
       if (!collisionState.active) {
         try {
-          await fetch("/api/pose", {
+          await apiRequest("/api/pose", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ pose: poseName, duration, source: "vite-ui" }),
@@ -734,7 +842,7 @@ function renderSequenceButtons() {
           return;
         }
         try {
-          await fetch("/api/joints", {
+          await apiRequest("/api/joints", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ positions, duration, label, source: "vite-ui" }),
@@ -753,9 +861,15 @@ function renderSequenceButtons() {
 
 function updateStatus(lastCommand) {
   const positions = getDisplayedPositions();
-  const backendStateMode = hasFreshBackendState() ? "live joint state" : "bridge only / local motion";
+  const backendStateMode = hasFreshBackendState()
+    ? backendMode === "demo"
+      ? "synthetic sensor state (demo)"
+      : "live joint state"
+    : "bridge only / local motion";
 
-  if (hasFreshBackendState()) {
+  if (backendMode === "demo") {
+    setSyncStatus("sync-warn", "Demo mode: backend calls suppressed; using synthetic sensor data");
+  } else if (hasFreshBackendState()) {
     setSyncStatus("sync-ok", "Live robot state available");
   } else if (backendConnected) {
     setSyncStatus("sync-warn", "Bridge connected but no live joint state");
@@ -763,8 +877,20 @@ function updateStatus(lastCommand) {
     setSyncStatus("sync-error", "Bridge unavailable");
   }
 
+  const backendLabel =
+    backendMode === "demo"
+      ? "demo mode (no network backend calls)"
+      : backendConnected
+        ? "connected"
+        : "offline demo mode";
+  const lastCallLabel = lastBackendCall
+    ? `${lastBackendCall.method} ${lastBackendCall.path}${lastBackendCall.suppressed ? " (suppressed)" : ""}`
+    : "none yet";
+
   statusOutput.textContent = [
-    `Backend: ${backendConnected ? "connected" : "offline demo mode"}`,
+    `Backend: ${backendLabel}`,
+    `Backend endpoint: ${API_BASE_URL || "same-origin /api"}`,
+    `Last backend call: ${lastCallLabel}`,
     `Backend state mode: ${backendStateMode}`,
     `Rapier collision state: ${collisionState.active ? collisionState.messages.join(" | ") : "clear"}`,
     `Joint positions: ${formatPositions(positions)}`,
@@ -795,12 +921,9 @@ function setSceneItemPresence(item, present) {
 
 async function fetchStatus() {
   try {
-    const response = await fetch("/api/status");
-    if (!response.ok) {
-      throw new Error(`status ${response.status}`);
-    }
-    const status = await response.json();
+    const status = await apiRequest("/api/status");
     backendConnected = true;
+    backendMode = DEMO_NO_BACKEND ? "demo" : "live";
     lastStatus = status;
     if (Array.isArray(status.joint_state?.positions) && status.joint_state.positions.length === 7) {
       const incoming = status.joint_state.positions.map((value) => normalizeAngle(value));
@@ -849,6 +972,7 @@ async function fetchStatus() {
     updateStatus(status.last_command);
   } catch (_error) {
     backendConnected = false;
+    backendMode = "offline";
     backendBlend = null;
     if (!jointForm.children.length) {
       renderJointInputs(JOINT_NAMES);
@@ -1935,7 +2059,7 @@ sendCustomButton.addEventListener("click", async () => {
   }
 
   try {
-    await fetch("/api/joints", {
+    await apiRequest("/api/joints", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ positions, duration, label: "custom", source: "vite-ui" }),
@@ -1995,7 +2119,7 @@ sendDirectButton.addEventListener("click", async () => {
     }
 
     try {
-      await fetch("/api/joints", {
+      await apiRequest("/api/joints", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ positions, duration, label: "direct", source: "vite-ui" }),
@@ -2026,7 +2150,11 @@ syncRobotButton.addEventListener("click", () => {
     setJointValues(positions);
     updateArmKinematics(positions);
     updateCollisionState();
-    setSyncStatus("sync-ok", "Synced from live robot state");
+    if (backendMode === "demo") {
+      setSyncStatus("sync-warn", "Synced from simulated demo sensor state");
+    } else {
+      setSyncStatus("sync-ok", "Synced from live robot state");
+    }
     updateStatus({
       type: "synced-from-robot",
       duration: null,
@@ -2035,7 +2163,9 @@ syncRobotButton.addEventListener("click", () => {
     return;
   }
 
-  if (backendConnected) {
+  if (backendMode === "demo") {
+    setSyncStatus("sync-warn", "Demo mode active: sync uses simulated state.");
+  } else if (backendConnected) {
     setSyncStatus("sync-warn", "Cannot sync: no live joint state. Start Gazebo/controllers.");
   } else {
     setSyncStatus("sync-error", "Cannot sync: ROS bridge is unavailable.");
